@@ -1,26 +1,127 @@
 import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import io from 'socket.io-client';
+import { ReactMic } from 'react-mic';
+import audioFile from './mpthreetest.mp3';
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
+const socket = io.connect("http://localhost:3001");
+const localAudio = new Audio();
+
+export default class App extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      role: "",
+      playing: [],
+      record: false
+    }
+  };
+
+  componentDidMount() {
+    socket.on('play', (message) => { this.receiveMessage(message) });
+    socket.on('stop', (message) => { this.stopAudio(message) });
+  }
+
+  componentWillUnmount() {
+    socket.off('play');
+    socket.off('stop');
+    localAudio.removeEventListener("ended", this.handleAudioStop());
+  }
+
+  handlePlaySound(url) {
+    socket.emit('play', { author: this.state.role, path: url });
+  }
+
+  receiveMessage(m) {
+    console.log(`----------- receiveMessage() -----------`);
+    console.log(m)
+    if (m.author === this.state.role) {
+      console.log(`this is my sound...`)
+      localAudio.src = m.path;
+      localAudio.play()
+      localAudio.addEventListener("ended", () => { this.handleAudioStop() });
+    } else {
+      console.log(`not my sound...`)
+      const audio = new Audio();
+      audio.src = m.path;
+      audio.play();
+    }
+
+    let newPlaying = this.state.playing;
+    newPlaying.push(m.author);
+    console.log(`new Array: ${newPlaying}`);
+    this.setState({ playing: newPlaying });
+  }
+
+  stopAudio(m) {
+    console.log(`----------- stopAudio() -----------`);
+    console.log(m);
+    let newPlaying = this.state.playing;
+    newPlaying.splice(newPlaying.indexOf(m.author), 1);
+    console.log(`removed ${m.author} from playing: ${newPlaying}`);
+    this.setState({ playing: newPlaying });
+  };
+
+  handleAudioStop() {
+    console.log("Audio ended")
+    socket.emit('stop', { author: this.state.role });
+  }
+
+  startRecording = () => {
+    this.setState({
+      record: true
+    });
+  }
+
+  stopRecording = () => {
+    this.setState({
+      record: false
+    });
+  }
+
+  onData(recordedBlob) {
+    console.log('chunk of real-time data is: ', recordedBlob);
+    // socket.emit('play', { audioData: recordedBlob });
+  }
+
+  onStop(recordedBlob) {
+    console.log('recordedBlob url is ', recordedBlob.blobURL);
+    this.handlePlaySound(recordedBlob.blobURL);
+  }
+
+  render() {
+    return (
+      <div className="App">
+        <h1>Stream POC</h1>
+        <div>
+          <input type="text" onChange={(e) => { this.setState({ role: e.target.value }) }} value={this.state.role} ></input>
+        </div>
+        <div>
+          <br />
+          <h3 >Stream audio</h3>
+          <ReactMic
+            record={this.state.record}
+            className="sound-wave"
+            onStop={(data) => { this.onStop(data) }}
+            onData={(data) => { this.onData(data) }}
+            strokeColor="#000000"
+            backgroundColor="#FF4081" />
+        </div>
+        <br />
+        <div>
+          <button onClick={() => { this.startRecording() }} type="button">Start</button>
+          <button onClick={() => { this.stopRecording() }} type="button">Stop</button>
+        </div>
+
+        <div>
+          {
+            this.state.playing.map((sound) => {
+              return (
+                <h3 key={Math.random() * 100} >{sound}</h3>
+              )
+            })
+          }
+        </div>
+      </div>
+    )
+  }
 }
-
-export default App;
