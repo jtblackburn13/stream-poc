@@ -3,7 +3,8 @@ import io from 'socket.io-client';
 import { ReactMic } from 'react-mic';
 import audioFile from './mpthreetest.mp3';
 
-const socket = io.connect("http://localhost:3001");
+// const socket = io.connect("http://localhost:3001");
+const socket = io.connect("http://192.168.1.101:1339");
 const localAudio = new Audio();
 
 export default class App extends React.Component {
@@ -12,19 +13,34 @@ export default class App extends React.Component {
     this.state = {
       role: "",
       playing: [],
-      record: false
+      record: false,
+      buffer: null
     }
+    this.videoRef = React.createRef()
   };
 
   componentDidMount() {
     socket.on('play', (message) => { this.receiveMessage(message) });
     socket.on('stop', (message) => { this.stopAudio(message) });
+    socket.on("videoStream", (data) => { this.receiveVideoStream(data) })
   }
 
   componentWillUnmount() {
     socket.off('play');
     socket.off('stop');
     localAudio.removeEventListener("ended", this.handleAudioStop());
+  }
+
+  receiveVideoStream(data) {
+    // console.log(data);
+    // this.setState({
+    //   buffer: URL.createObjectURL(data)
+    // })
+    // this.videoRef.current.srcObject = data;
+    const stream = new MediaStream()
+    stream.addTrack(data)
+    this.videoRef.current.srcObject = stream
+    // this.setState(() => ({ stream }))
   }
 
   handlePlaySound(url) {
@@ -85,7 +101,8 @@ export default class App extends React.Component {
 
   onStop(recordedBlob) {
     console.log('recordedBlob url is ', recordedBlob.blobURL);
-    this.handlePlaySound(recordedBlob.blobURL);
+    this.handlePlaySound(recordedBlob);
+    // this.handlePlaySound(recordedBlob.blobURL);
   }
 
   render() {
@@ -95,6 +112,11 @@ export default class App extends React.Component {
         <div>
           <input type="text" onChange={(e) => { this.setState({ role: e.target.value }) }} value={this.state.role} ></input>
         </div>
+        <br />
+        <div>
+          <video ref={this.videoRef} />
+        </div>
+        <br />
         <div>
           <br />
           <h3 >Stream audio</h3>
@@ -121,6 +143,7 @@ export default class App extends React.Component {
             })
           }
         </div>
+
       </div>
     )
   }
